@@ -12,15 +12,17 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([300.0, 220.0])
             .with_icon(
                 // NOTE: Adding an icon is optional
-                eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
-                    .unwrap(),
+                eframe::icon_data::from_png_bytes(
+                    &include_bytes!("../assets/icons8-calculator-96.png")[..],
+                )
+                .unwrap(),
             ),
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "simple calculator",
         native_options,
-        Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
+        Box::new(|cc| Box::new(calculator_webapp::TemplateApp::new(cc))),
     )
 }
 
@@ -37,7 +39,7 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
+                Box::new(|cc| Box::new(calculator_webapp::TemplateApp::new(cc))),
             )
             .await
             .expect("failed to start eframe");

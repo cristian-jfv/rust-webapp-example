@@ -1,20 +1,42 @@
+use egui::{Color32, TextStyle};
+use egui_extras::{Size, StripBuilder};
+
+use crate::parser::expression;
+
+use super::parser::tokens::TokenStream;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
     // Example stuff:
-    label: String,
+    input: String,
+    output: String, //#[serde(skip)] // This how you opt-out of serialization of a field
+                    //value: f32,
+}
 
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
+impl TemplateApp {
+    pub fn compute(&mut self) {
+        let mut ts = match TokenStream::new(self.input.clone()) {
+            Some(v) => v,
+            None => {
+                return;
+            }
+        };
+
+        match expression(&mut ts) {
+            Ok(ans) => self.output = format!("{}", ans),
+            Err(e) => self.output = format!("{}", e),
+        }
+    }
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
             // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
+            input: String::new(), //"write some expression here".to_owned(),
+            output: "output is empty".to_owned(), //value: 2.7,
         }
     }
 }
@@ -61,49 +83,100 @@ impl eframe::App for TemplateApp {
                     ui.add_space(16.0);
                 }
 
-                egui::widgets::global_dark_light_mode_buttons(ui);
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::RIGHT), |ui| {
+                    egui::widgets::global_dark_light_mode_buttons(ui);
+                })
             });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading("eframe template");
-
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(&mut self.label);
-            });
-
-            ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                self.value += 1.0;
+            let is_web = cfg!(target_arch = "wasm32");
+            if is_web {
+                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    ui.heading("Simple Calculator");
+                });
             }
 
-            ui.separator();
+            let dark_mode = ui.visuals().dark_mode;
+            let faded_color = ui.visuals().window_fill();
+            let faded_color = |color: Color32| -> Color32 {
+                use egui::Rgba;
+                let t = if dark_mode { 0.95 } else { 0.8 };
+                egui::lerp(Rgba::from(color)..=Rgba::from(faded_color), t).into()
+            };
+            let body_text_size = TextStyle::Body.resolve(ui.style()).size;
 
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                powered_by_egui_and_eframe(ui);
-                egui::warn_if_debug_build(ui);
-            });
+            StripBuilder::new(ui)
+                .size(Size::exact(3.0 * body_text_size))
+                .size(Size::remainder())
+                .size(Size::exact(1.5 * body_text_size))
+                .vertical(|mut strip| {
+                    strip.strip(|builder| {
+                        builder
+                            .size(Size::relative(0.1))
+                            .size(Size::remainder())
+                            .size(Size::exact(30.0))
+                            .size(Size::relative(0.1))
+                            .horizontal(|mut strip| {
+                                strip.empty();
+                                strip.cell(|ui| {
+                                    ui.horizontal_centered(|ui| {
+                                        let response = ui.add(
+                                            egui::TextEdit::singleline(&mut self.input)
+                                                .desired_width(f32::INFINITY),
+                                        );
+                                        if response.changed() {
+                                            self.output = String::from("response changed");
+                                        }
+                                        if response.lost_focus()
+                                            && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                                        {
+                                            //self.output = String::from("enter key pressed");
+                                            self.compute();
+                                            response.request_focus();
+                                        }
+                                    });
+                                });
+                                strip.cell(|ui| {
+                                    ui.horizontal_centered(|ui| {
+                                        let btn_response = ui.add(egui::Button::new(" = "));
+                                        if btn_response.clicked() {
+                                            //self.output = String::from("click");
+                                            self.compute();
+                                        }
+                                    });
+                                });
+                                strip.empty();
+                            });
+                    });
+                    strip.cell(|ui| {
+                        ui.painter().rect_filled(
+                            ui.available_rect_before_wrap(),
+                            0.0,
+                            faded_color(Color32::BLUE),
+                        );
+                        ui.label(&self.output);
+                    });
+                    strip.cell(|ui| {
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                            ui.separator();
+                            ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                                egui::warn_if_debug_build(ui);
+                                // <a target="_blank" href="https://icons8.com/icon/12780/calculator">Calculator</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
+                                ui.add(egui::Hyperlink::from_label_and_url(
+                                    "Calculator",
+                                    "https://icons8.com/icon/12780/calculator",
+                                ));
+                                ui.label("icon by");
+                                ui.add(egui::Hyperlink::from_label_and_url(
+                                    "Icons8",
+                                    "https://icons8.com",
+                                ));
+                            });
+                        });
+                    })
+                });
         });
     }
-}
-
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
-    });
 }
